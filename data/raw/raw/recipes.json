@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Vegetable Stir Fry",
+    "ingredients": ["bell pepper", "carrot", "rice", "soy sauce"],
+    "steps": ["Chop vegetables...", "Stir fry for 10 mins..."],
+    "cuisine": "Asian"
+  }
+]

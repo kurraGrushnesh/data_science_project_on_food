@@ -1,0 +1,21 @@
+import pandas as pd
+import os
+from pathlib import Path
+
+def save_recipes_to_csv():
+    # Sample data (replace with your actual data loading logic)
+    recipes = [
+        {
+            "name": "Vegetable Stir Fry",
+            "ingredients": "bell pepper,carrot,rice",
+            "steps": "Chop vegetables...|Stir fry...",
+            "cuisine": "Asian"
+        }
+    ]
+
+    # Create directory if needed
+    Path("data/processed").mkdir(parents=True, exist_ok=True)
+
+    # Save as CSV
+    pd.DataFrame(recipes).to_csv("data/processed/recipes.csv", index=False)
+    print("Saved recipes to data/processed/recipes.csv")
