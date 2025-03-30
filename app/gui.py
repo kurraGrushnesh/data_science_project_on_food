@@ -7,6 +7,7 @@ from typing import Dict, Any
 import streamlit as st
 from PIL import Image
 
+
 # Configure paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 IMAGES_DIR = PROJECT_ROOT / "images"
@@ -57,6 +58,7 @@ def configure_page() -> None:
     """, unsafe_allow_html=True)
 
 
+# noinspection PyUnresolvedReferences
 def load_image(image_name: str) -> Image.Image:
     """Safely loads an image from the images directory"""
     image_path = IMAGES_DIR / image_name
@@ -64,9 +66,10 @@ def load_image(image_name: str) -> Image.Image:
         if image_path.exists():
             return Image.open(image_path)
         return Image.new('RGB', (400, 300), color=(240, 240, 240))  # Default placeholder
-    except Exception as e:
-        st.warning(f"Couldn't load image {image_name}: {e}")
+    except Exception as p:
+        st.warning(f"Couldn't load image {image_name}: {p}")
         return Image.new('RGB', (400, 300), color=(240, 240, 240))
+
 
 
 def display_recipe(recipe: Dict[str, Any], expanded: bool = True) -> None:
@@ -149,8 +152,8 @@ def show_sidebar() -> None:
                         st.session_state.recipe_search_input = recipe_name  # Update session state
                     else:
                         st.warning("Recipe not found. Try another name.")
-                except Exception as e:
-                    st.error(f"Error fetching recipe: {str(e)}")
+                except Exception as p:
+                    st.error(f"Error fetching recipe: {str(p)}")
             else:
                 st.warning("Please enter a recipe name")
 
@@ -238,8 +241,7 @@ def main_interface() -> None:
                     for recipe in RECIPES:
                         recipe_ingredients = [ing.strip().lower() for ing in recipe['ingredients'].split(',')]
                         if any(ing in recipe_ingredients for ing in input_ingredients):
-                            if ("Any" in cuisine_pref or recipe['cuisine'] in cuisine_pref) and recipe[
-                                'cooking_time'] <= max_time:
+                            if ("Any" in cuisine_pref or recipe['cuisine'] in cuisine_pref) and recipe['cooking_time'] <= max_time:
                                 matching_recipes.append(recipe)
 
                     if matching_recipes:
@@ -253,9 +255,9 @@ def main_interface() -> None:
                         st.markdown("### Here are some sample recipes:")
                         for recipe in random.sample(RECIPES, min(3, len(RECIPES))):
                             display_recipe(recipe)
-                except Exception as e:
-                    st.error(f"⚠️ Error finding recipes: {str(e)}")
-                    logging.error(f"Recipe search error: {str(e)}")
+                except Exception as p:
+                    st.error(f"⚠️ Error finding recipes: {str(p)}")
+                    logging.error(f"Recipe search error: {str(p)}")
 
 
 def main() -> None:
