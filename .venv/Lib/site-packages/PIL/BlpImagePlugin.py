@@ -29,13 +29,14 @@ BLP files come in many different flavours:
   - DXT5 compression is used if alpha_encoding == 7.
 """
 
+from __future__ import annotations
+
 import os
 import struct
 from enum import IntEnum
 from io import BytesIO
 
 from . import Image, ImageFile
-from ._deprecate import deprecate
 
 
 class Format(IntEnum):
@@ -52,21 +53,6 @@ class AlphaEncoding(IntEnum):
     DXT1 = 0
     DXT3 = 1
     DXT5 = 7
-
-
-def __getattr__(name):
-    for enum, prefix in {
-        Format: "BLP_FORMAT_",
-        Encoding: "BLP_ENCODING_",
-        AlphaEncoding: "BLP_ALPHA_ENCODING_",
-    }.items():
-        if name.startswith(prefix):
-            name = name[len(prefix) :]
-            if name in enum.__members__:
-                deprecate(f"{prefix}{name}", 10, f"{enum.__name__}.{name}")
-                return enum[name]
-    msg = f"module '{__name__}' has no attribute '{name}'"
-    raise AttributeError(msg)
 
 
 def unpack_565(i):
@@ -282,7 +268,7 @@ class BlpImageFile(ImageFile.ImageFile):
             msg = f"Bad BLP magic {repr(self.magic)}"
             raise BLPFormatError(msg)
 
-        self.mode = "RGBA" if self._blp_alpha_depth else "RGB"
+        self._mode = "RGBA" if self._blp_alpha_depth else "RGB"
         self.tile = [(decoder, (0, 0) + self.size, 0, (self.mode, 0, 1))]
 
 
@@ -355,7 +341,7 @@ class BLP1Decoder(_BLPBaseDecoder):
             if self._blp_encoding in (4, 5):
                 palette = self._read_palette()
                 data = self._read_bgra(palette)
-                self.set_as_raw(bytes(data))
+                self.set_as_raw(data)
             else:
                 msg = f"Unsupported BLP encoding {repr(self._blp_encoding)}"
                 raise BLPFormatError(msg)
@@ -426,7 +412,7 @@ class BLP2Decoder(_BLPBaseDecoder):
             msg = f"Unknown BLP compression {repr(self._blp_compression)}"
             raise BLPFormatError(msg)
 
-        self.set_as_raw(bytes(data))
+        self.set_as_raw(data)
 
 
 class BLPEncoder(ImageFile.PyEncoder):
@@ -435,9 +421,11 @@ class BLPEncoder(ImageFile.PyEncoder):
     def _write_palette(self):
         data = b""
         palette = self.im.getpalette("RGBA", "RGBA")
-        for i in range(256):
+        for i in range(len(palette) // 4):
             r, g, b, a = palette[i * 4 : (i + 1) * 4]
             data += struct.pack("<4B", b, g, r, a)
+        while len(data) < 256 * 4:
+            data += b"\x00" * 4
         return data
 
     def encode(self, bufsize):
@@ -458,7 +446,7 @@ class BLPEncoder(ImageFile.PyEncoder):
         return len(data), 0, data
 
 
-def _save(im, fp, filename, save_all=False):
+def _save(im, fp, filename):
     if im.mode != "P":
         msg = "Unsupported BLP image mode"
         raise ValueError(msg)
