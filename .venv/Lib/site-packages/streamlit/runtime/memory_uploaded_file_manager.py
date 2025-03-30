@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 from streamlit import util
 from streamlit.runtime.stats import CacheStat, group_stats
@@ -25,6 +25,9 @@ from streamlit.runtime.uploaded_file_manager import (
     UploadedFileRec,
     UploadFileUrlInfo,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class MemoryUploadedFileManager(UploadedFileManager):

@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import threading
 from contextlib import contextmanager
-from typing import Any, Callable, Iterator
+from typing import TYPE_CHECKING, Any, Callable
 
-from streamlit.proto.WidgetStates_pb2 import WidgetState as WidgetStateProto
-from streamlit.proto.WidgetStates_pb2 import WidgetStates as WidgetStatesProto
-from streamlit.runtime.state.common import RegisterWidgetResult, T, WidgetMetadata
-from streamlit.runtime.state.query_params import QueryParams
-from streamlit.runtime.state.session_state import SessionState
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from streamlit.proto.WidgetStates_pb2 import WidgetState as WidgetStateProto
+    from streamlit.proto.WidgetStates_pb2 import WidgetStates as WidgetStatesProto
+    from streamlit.runtime.state.common import RegisterWidgetResult, T, WidgetMetadata
+    from streamlit.runtime.state.query_params import QueryParams
+    from streamlit.runtime.state.session_state import SessionState
 
 
 class SafeSessionState:
@@ -123,7 +126,7 @@ class SafeSessionState:
             raise AttributeError(f"{key} not found in session_state.")
 
     def __repr__(self):
-        """Presents itself as a simple dict of the underlying SessionState instance"""
+        """Presents itself as a simple dict of the underlying SessionState instance."""
         kv = ((k, self._state[k]) for k in self._state._keys())
         s = ", ".join(f"{k}: {v!r}" for k, v in kv)
         return f"{{{s}}}"

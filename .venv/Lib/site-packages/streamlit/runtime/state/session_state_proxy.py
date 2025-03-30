@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,23 @@
 
 from __future__ import annotations
 
-from typing import Any, Final, Iterator, MutableMapping
+from collections.abc import Iterator, MutableMapping
+from typing import Any, Final
 
 from streamlit import logger as _logger
 from streamlit import runtime
+from streamlit.elements.lib.utils import Key
 from streamlit.runtime.metrics_util import gather_metrics
 from streamlit.runtime.state.common import require_valid_user_key
 from streamlit.runtime.state.safe_session_state import SafeSessionState
 from streamlit.runtime.state.session_state import SessionState
-from streamlit.type_util import Key
 
 _LOGGER: Final = _logger.get_logger(__name__)
 
 
 _state_use_warning_already_displayed: bool = False
+# The mock session state is used as a fallback if the script is run without `streamlit run`
+_mock_session_state: SafeSessionState | None = None
 
 
 def get_session_state() -> SafeSessionState:
@@ -38,12 +41,14 @@ def get_session_state() -> SafeSessionState:
     st.session_state.
     """
     global _state_use_warning_already_displayed
-    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    from streamlit.runtime.scriptrunner_utils.script_run_context import (
+        get_script_run_ctx,
+    )
 
     ctx = get_script_run_ctx()
 
-    # If there is no script run context because the script is run bare, have
-    # session state act as an always empty dictionary, and print a warning.
+    # If there is no script run context because the script is run bare, we
+    # use a global mock session state version to allow bare script execution (via python script.py)
     if ctx is None:
         if not _state_use_warning_already_displayed:
             _state_use_warning_already_displayed = True
@@ -51,7 +56,13 @@ def get_session_state() -> SafeSessionState:
                 _LOGGER.warning(
                     "Session state does not function when running a script without `streamlit run`"
                 )
-        return SafeSessionState(SessionState(), lambda: None)
+
+        global _mock_session_state
+
+        if _mock_session_state is None:
+            # Lazy initialize the mock session state
+            _mock_session_state = SafeSessionState(SessionState(), lambda: None)
+        return _mock_session_state
     return ctx.session_state
 
 
@@ -138,5 +149,5 @@ class SessionStateProxy(MutableMapping[Key, Any]):
 def _missing_attr_error_message(attr_name: str) -> str:
     return (
         f'st.session_state has no attribute "{attr_name}". Did you forget to initialize it? '
-        f"More info: https://docs.streamlit.io/library/advanced-features/session-state#initialization"
+        f"More info: https://docs.streamlit.io/develop/concepts/architecture/session-state#initialization"
     )

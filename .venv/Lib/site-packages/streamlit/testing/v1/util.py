@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,14 +25,15 @@ def patch_config_options(config_overrides: dict[str, Any]):
     """A context manager that overrides config options. It can
     also be used as a function decorator.
 
-    Examples:
+    Examples
+    --------
     >>> with patch_config_options({"server.headless": True}):
-    ...     assert(config.get_option("server.headless") is True)
+    ...     assert config.get_option("server.headless") is True
     ...     # Other test code that relies on these options
 
     >>> @patch_config_options({"server.headless": True})
     ... def test_my_thing():
-    ...   assert(config.get_option("server.headless") is True)
+    ...     assert config.get_option("server.headless") is True
     """
     # Lazy-load for performance reasons.
     from unittest.mock import patch

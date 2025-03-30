@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import re
 import textwrap
 from typing import Any, Callable
 
-from streamlit import util
-from streamlit.case_converters import to_snake_case
+from streamlit.string_util import to_snake_case
+from streamlit.util import repr_
 
 
 class ConfigOption:
@@ -152,8 +152,11 @@ class ConfigOption:
             # with a lowercase letter with an optional "_" preceding it.
             # Examples: "_section", "section1"
             r"\_?[a-z][a-zA-Z0-9]*"
+            # Handling zero or additional parts, separated by period
+            # Examples: "_section.subsection", "section1._section2"
+            r"(\.[a-z][a-zA-Z0-9]*)*"
             r")"
-            # Separator between groups
+            # The final period, separating section and name
             r"\."
             # Capture a group called "name"
             r"(?P<name>"
@@ -179,6 +182,8 @@ class ConfigOption:
         self.where_defined = ConfigOption.DEFAULT_DEFINITION
         self.type = type_
         self.sensitive = sensitive
+        # infer multiple values if the default value is a list or tuple
+        self.multiple = isinstance(default_val, (list, tuple))
 
         if self.replaced_by:
             self.deprecated = True
@@ -194,7 +199,7 @@ class ConfigOption:
         self.set_value(default_val)
 
     def __repr__(self) -> str:
-        return util.repr_(self)
+        return repr_(self)
 
     def __call__(self, get_val_func: Callable[[], Any]) -> ConfigOption:
         """Assign a function to compute the value for this option.
@@ -213,9 +218,9 @@ class ConfigOption:
             Returns self, which makes testing easier. See config_test.py.
 
         """
-        assert (
-            get_val_func.__doc__
-        ), "Complex config options require doc strings for their description."
+        assert get_val_func.__doc__, (
+            "Complex config options require doc strings for their description."
+        )
         self.description = get_val_func.__doc__
         self._get_val_func = get_val_func
         return self
@@ -248,13 +253,6 @@ class ConfigOption:
         self.is_default = value == self.default_val
 
         if self.deprecated and self.where_defined != ConfigOption.DEFAULT_DEFINITION:
-            details = {
-                "key": self.key,
-                "file": self.where_defined,
-                "explanation": self.deprecation_text,
-                "date": self.expiration_date,
-            }
-
             if self.is_expired():
                 # Import here to avoid circular imports
                 from streamlit.logger import get_logger
@@ -262,17 +260,16 @@ class ConfigOption:
                 LOGGER = get_logger(__name__)
                 LOGGER.error(
                     textwrap.dedent(
-                        """
+                        f"""
                     ════════════════════════════════════════════════
-                    %(key)s IS NO LONGER SUPPORTED.
+                    {self.key} IS NO LONGER SUPPORTED.
 
-                    %(explanation)s
+                    {self.deprecation_text}
 
-                    Please update %(file)s.
+                    Please update {self.where_defined}.
                     ════════════════════════════════════════════════
                     """
                     )
-                    % details
                 )
             else:
                 # Import here to avoid circular imports
@@ -281,18 +278,17 @@ class ConfigOption:
                 LOGGER = get_logger(__name__)
                 LOGGER.warning(
                     textwrap.dedent(
-                        """
+                        f"""s
                     ════════════════════════════════════════════════
-                    %(key)s IS DEPRECATED.
-                    %(explanation)s
+                    {self.key} IS DEPRECATED.
+                    {self.deprecation_text}
 
-                    This option will be removed on or after %(date)s.
+                    This option will be removed on or after {self.expiration_date}.
 
-                    Please update %(file)s.
+                    Please update {self.where_defined}.
                     ════════════════════════════════════════════════
                     """
                     )
-                    % details
                 )
 
     def is_expired(self) -> bool:
@@ -306,9 +302,7 @@ class ConfigOption:
 
     @property
     def env_var(self):
-        """
-        Get the name of the environment variable that can be used to set the option.
-        """
+        """Get the name of the environment variable that can be used to set the option."""
         name = self.key.replace(".", "_")
         return f"STREAMLIT_{to_snake_case(name).upper()}"
 

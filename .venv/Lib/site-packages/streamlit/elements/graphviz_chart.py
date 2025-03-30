@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import TYPE_CHECKING, Union, cast
 
 from typing_extensions import TypeAlias
@@ -25,14 +24,16 @@ from streamlit import type_util
 from streamlit.errors import StreamlitAPIException
 from streamlit.proto.GraphVizChart_pb2 import GraphVizChart as GraphVizChartProto
 from streamlit.runtime.metrics_util import gather_metrics
-from streamlit.util import HASHLIB_KWARGS
+from streamlit.util import calc_md5
 
 if TYPE_CHECKING:
     import graphviz
 
     from streamlit.delta_generator import DeltaGenerator
 
-FigureOrDot: TypeAlias = Union["graphviz.Graph", "graphviz.Digraph", str]
+FigureOrDot: TypeAlias = Union[
+    "graphviz.Graph", "graphviz.Digraph", "graphviz.Source", str
+]
 
 
 class GraphvizMixin:
@@ -46,12 +47,16 @@ class GraphvizMixin:
 
         Parameters
         ----------
-        figure_or_dot : graphviz.dot.Graph, graphviz.dot.Digraph, str
+        figure_or_dot : graphviz.dot.Graph, graphviz.dot.Digraph, graphviz.sources.Source, str
             The Graphlib graph object or dot string to display
 
         use_container_width : bool
-            If True, set the chart width to the column width. This takes
-            precedence over the figure's native `width` value.
+            Whether to override the figure's native width with the width of
+            the parent container. If ``use_container_width`` is ``False``
+            (default), Streamlit sets the width of the chart to fit its contents
+            according to the plotting library, up to the width of the parent
+            container. If ``use_container_width`` is ``True``, Streamlit sets
+            the width of the figure to match the width of the parent container.
 
         Example
         -------
@@ -60,19 +65,19 @@ class GraphvizMixin:
         >>>
         >>> # Create a graphlib graph object
         >>> graph = graphviz.Digraph()
-        >>> graph.edge('run', 'intr')
-        >>> graph.edge('intr', 'runbl')
-        >>> graph.edge('runbl', 'run')
-        >>> graph.edge('run', 'kernel')
-        >>> graph.edge('kernel', 'zombie')
-        >>> graph.edge('kernel', 'sleep')
-        >>> graph.edge('kernel', 'runmem')
-        >>> graph.edge('sleep', 'swap')
-        >>> graph.edge('swap', 'runswap')
-        >>> graph.edge('runswap', 'new')
-        >>> graph.edge('runswap', 'runmem')
-        >>> graph.edge('new', 'runmem')
-        >>> graph.edge('sleep', 'runmem')
+        >>> graph.edge("run", "intr")
+        >>> graph.edge("intr", "runbl")
+        >>> graph.edge("runbl", "run")
+        >>> graph.edge("run", "kernel")
+        >>> graph.edge("kernel", "zombie")
+        >>> graph.edge("kernel", "sleep")
+        >>> graph.edge("kernel", "runmem")
+        >>> graph.edge("sleep", "swap")
+        >>> graph.edge("swap", "runswap")
+        >>> graph.edge("runswap", "new")
+        >>> graph.edge("runswap", "runmem")
+        >>> graph.edge("new", "runmem")
+        >>> graph.edge("sleep", "runmem")
         >>>
         >>> st.graphviz_chart(graph)
 
@@ -104,7 +109,7 @@ class GraphvizMixin:
         """
         # Generate element ID from delta path
         delta_path = self.dg._get_delta_path_str()
-        element_id = hashlib.md5(delta_path.encode(), **HASHLIB_KWARGS).hexdigest()
+        element_id = calc_md5(delta_path.encode())
 
         graphviz_chart_proto = GraphVizChartProto()
 

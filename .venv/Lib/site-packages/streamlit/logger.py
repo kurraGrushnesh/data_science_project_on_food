@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import logging
 import sys
 from typing import Final
 
-DEFAULT_LOG_MESSAGE: Final = "%(asctime)s %(levelname) -7s " "%(name)s: %(message)s"
+DEFAULT_LOG_MESSAGE: Final = "%(asctime)s %(levelname) -7s %(name)s: %(message)s"
 
 # Loggers for each name are saved here.
 _loggers: dict[str, logging.Logger] = {}

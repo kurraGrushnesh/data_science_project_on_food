@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import errno
 import logging
+import mimetypes
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import tornado.concurrent
 import tornado.locks
@@ -28,12 +29,13 @@ import tornado.web
 import tornado.websocket
 from tornado.httpserver import HTTPServer
 
-from streamlit import cli_util, config, file_util, source_util, util
-from streamlit.components.v1.components import ComponentRegistry
+from streamlit import cli_util, config, file_util, util
+from streamlit.auth_util import is_authlib_installed
 from streamlit.config_option import ConfigOption
 from streamlit.logger import get_logger
 from streamlit.runtime import Runtime, RuntimeConfig, RuntimeState
 from streamlit.runtime.memory_media_file_storage import MemoryMediaFileStorage
+from streamlit.runtime.memory_session_storage import MemorySessionStorage
 from streamlit.runtime.memory_uploaded_file_manager import MemoryUploadedFileManager
 from streamlit.runtime.runtime_util import get_max_message_size_bytes
 from streamlit.web.cache_storage_manager_config import (
@@ -48,13 +50,20 @@ from streamlit.web.server.routes import (
     HealthHandler,
     HostConfigHandler,
     MessageCacheHandler,
+    RemoveSlashHandler,
     StaticFileHandler,
 )
-from streamlit.web.server.server_util import DEVELOPMENT_PORT, make_url_path_regex
+from streamlit.web.server.server_util import (
+    DEVELOPMENT_PORT,
+    get_cookie_secret,
+    is_xsrf_enabled,
+    make_url_path_regex,
+)
 from streamlit.web.server.stats_request_handler import StatsRequestHandler
 from streamlit.web.server.upload_file_request_handler import UploadFileRequestHandler
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable
     from ssl import SSLContext
 
 _LOGGER: Final = get_logger(__name__)
@@ -87,11 +96,16 @@ UPLOAD_FILE_ENDPOINT: Final = "/_stcore/upload_file"
 STREAM_ENDPOINT: Final = r"_stcore/stream"
 METRIC_ENDPOINT: Final = r"(?:st-metrics|_stcore/metrics)"
 MESSAGE_ENDPOINT: Final = r"_stcore/message"
-HEALTH_ENDPOINT: Final = r"(?:healthz|_stcore/health)"
+NEW_HEALTH_ENDPOINT: Final = "_stcore/health"
+HEALTH_ENDPOINT: Final = rf"(?:healthz|{NEW_HEALTH_ENDPOINT})"
 HOST_CONFIG_ENDPOINT: Final = r"_stcore/host-config"
 SCRIPT_HEALTH_CHECK_ENDPOINT: Final = (
     r"(?:script-health-check|_stcore/script-health-check)"
 )
+
+OAUTH2_CALLBACK_ENDPOINT: Final = "/oauth2callback"
+AUTH_LOGIN_ENDPOINT: Final = "/auth/login"
+AUTH_LOGOUT_ENDPOINT: Final = "/auth/logout"
 
 
 class RetriesExceeded(Exception):
@@ -229,6 +243,7 @@ class Server:
     def __init__(self, main_script_path: str, is_hello: bool):
         """Create the server. It won't be started yet."""
         _set_tornado_log_levels()
+        self.initialize_mimetypes()
 
         self._main_script_path = main_script_path
 
@@ -246,10 +261,21 @@ class Server:
                 uploaded_file_manager=uploaded_file_mgr,
                 cache_storage_manager=create_default_cache_storage_manager(),
                 is_hello=is_hello,
+                session_storage=MemorySessionStorage(
+                    ttl_seconds=config.get_option("server.disconnectedSessionTTL")
+                ),
             ),
         )
 
         self._runtime.stats_mgr.register_provider(media_file_storage)
+
+    @classmethod
+    def initialize_mimetypes(cls) -> None:
+        """Ensures that common mime-types are robust against system misconfiguration."""
+        mimetypes.add_type("text/html", ".html")
+        mimetypes.add_type("application/javascript", ".js")
+        mimetypes.add_type("text/css", ".css")
+        mimetypes.add_type("image/webp", ".webp")
 
     def __repr__(self) -> str:
         return util.repr_(self)
@@ -287,22 +313,22 @@ class Server:
             (
                 make_url_path_regex(base, STREAM_ENDPOINT),
                 BrowserWebSocketHandler,
-                dict(runtime=self._runtime),
+                {"runtime": self._runtime},
             ),
             (
                 make_url_path_regex(base, HEALTH_ENDPOINT),
                 HealthHandler,
-                dict(callback=lambda: self._runtime.is_ready_for_browser_connection),
+                {"callback": lambda: self._runtime.is_ready_for_browser_connection},
             ),
             (
                 make_url_path_regex(base, MESSAGE_ENDPOINT),
                 MessageCacheHandler,
-                dict(cache=self._runtime.message_cache),
+                {"cache": self._runtime.message_cache},
             ),
             (
                 make_url_path_regex(base, METRIC_ENDPOINT),
                 StatsRequestHandler,
-                dict(stats_manager=self._runtime.stats_mgr),
+                {"stats_manager": self._runtime.stats_mgr},
             ),
             (
                 make_url_path_regex(base, HOST_CONFIG_ENDPOINT),
@@ -314,10 +340,10 @@ class Server:
                     rf"{UPLOAD_FILE_ENDPOINT}/(?P<session_id>[^/]+)/(?P<file_id>[^/]+)",
                 ),
                 UploadFileRequestHandler,
-                dict(
-                    file_mgr=self._runtime.uploaded_file_mgr,
-                    is_active_session=self._runtime.is_active_session,
-                ),
+                {
+                    "file_mgr": self._runtime.uploaded_file_mgr,
+                    "is_active_session": self._runtime.is_active_session,
+                },
             ),
             (
                 make_url_path_regex(base, f"{MEDIA_ENDPOINT}/(.*)"),
@@ -327,7 +353,7 @@ class Server:
             (
                 make_url_path_regex(base, "component/(.*)"),
                 ComponentRequestHandler,
-                dict(registry=ComponentRegistry.instance()),
+                {"registry": self._runtime.component_registry},
             ),
         ]
 
@@ -337,9 +363,9 @@ class Server:
                     (
                         make_url_path_regex(base, SCRIPT_HEALTH_CHECK_ENDPOINT),
                         HealthHandler,
-                        dict(
-                            callback=lambda: self._runtime.does_script_run_without_error()
-                        ),
+                        {
+                            "callback": lambda: self._runtime.does_script_run_without_error()
+                        },
                     )
                 ]
             )
@@ -355,6 +381,33 @@ class Server:
                 ]
             )
 
+        if is_authlib_installed():
+            from streamlit.web.server.oauth_authlib_routes import (
+                AuthCallbackHandler,
+                AuthLoginHandler,
+                AuthLogoutHandler,
+            )
+
+            routes.extend(
+                [
+                    (
+                        make_url_path_regex(base, OAUTH2_CALLBACK_ENDPOINT),
+                        AuthCallbackHandler,
+                        {"base_url": base},
+                    ),
+                    (
+                        make_url_path_regex(base, AUTH_LOGIN_ENDPOINT),
+                        AuthLoginHandler,
+                        {"base_url": base},
+                    ),
+                    (
+                        make_url_path_regex(base, AUTH_LOGOUT_ENDPOINT),
+                        AuthLogoutHandler,
+                        {"base_url": base},
+                    ),
+                ]
+            )
+
         if config.get_option("global.developmentMode"):
             _LOGGER.debug("Serving static content from the Node dev server")
         else:
@@ -364,27 +417,39 @@ class Server:
             routes.extend(
                 [
                     (
+                        # We want to remove paths with a trailing slash, but if the path
+                        # starts with a double slash //, the redirect will point
+                        # the browser to the wrong host.
+                        make_url_path_regex(
+                            base, "(?!/)(.*)", trailing_slash="required"
+                        ),
+                        RemoveSlashHandler,
+                    ),
+                    (
                         make_url_path_regex(base, "(.*)"),
                         StaticFileHandler,
                         {
                             "path": "%s/" % static_path,
                             "default_filename": "index.html",
-                            "get_pages": lambda: {
-                                page_info["page_name"]
-                                for page_info in source_util.get_pages(
-                                    self.main_script_path
-                                ).values()
-                            },
+                            "reserved_paths": [
+                                # These paths are required for identifying
+                                # the base url path.
+                                NEW_HEALTH_ENDPOINT,
+                                HOST_CONFIG_ENDPOINT,
+                            ],
                         },
                     ),
-                    (make_url_path_regex(base, trailing_slash=False), AddSlashHandler),
+                    (
+                        make_url_path_regex(base, trailing_slash="prohibited"),
+                        AddSlashHandler,
+                    ),
                 ]
             )
 
         return tornado.web.Application(
             routes,
-            cookie_secret=config.get_option("server.cookieSecret"),
-            xsrf_cookies=config.get_option("server.enableXsrfProtection"),
+            cookie_secret=get_cookie_secret(),
+            xsrf_cookies=is_xsrf_enabled(),
             # Set the websocket message size. The default value is too low.
             websocket_max_message_size=get_max_message_size_bytes(),
             **TORNADO_SETTINGS,  # type: ignore[arg-type]
@@ -396,9 +461,9 @@ class Server:
 
     @property
     def is_running_hello(self) -> bool:
-        from streamlit.hello import Hello
+        from streamlit.hello import streamlit_app
 
-        return self._main_script_path == Hello.__file__
+        return self._main_script_path == streamlit_app.__file__
 
     def stop(self) -> None:
         cli_util.print_to_cli("  Stopping...", fg="blue")

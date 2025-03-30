@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,8 +23,7 @@ from __future__ import annotations
 import threading
 from collections import ChainMap
 from contextlib import contextmanager
-from datetime import timedelta
-from typing import TYPE_CHECKING, Iterator, cast
+from typing import TYPE_CHECKING, cast
 
 from streamlit.connections import BaseConnection
 from streamlit.connections.util import (
@@ -36,6 +35,9 @@ from streamlit.errors import StreamlitAPIException
 from streamlit.runtime.caching import cache_data
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from datetime import timedelta
+
     from pandas import DataFrame
     from snowflake.snowpark.session import Session  # type:ignore[import]
 
@@ -65,9 +67,6 @@ class SnowparkConnection(BaseConnection["Session"]):
 
     def _connect(self, **kwargs) -> Session:
         from snowflake.snowpark.context import get_active_session  # type:ignore[import]
-        from snowflake.snowpark.exceptions import (  # type:ignore[import]
-            SnowparkSessionException,
-        )
         from snowflake.snowpark.session import Session
 
         # If we're running in SiS, just call get_active_session(). Otherwise, attempt to
@@ -92,7 +91,7 @@ class SnowparkConnection(BaseConnection["Session"]):
             if p not in conn_params:
                 raise StreamlitAPIException(f"Missing Snowpark connection param: {p}")
 
-        return cast(Session, Session.builder.configs(conn_params).create())
+        return cast("Session", Session.builder.configs(conn_params).create())
 
     def query(
         self,
@@ -125,7 +124,7 @@ class SnowparkConnection(BaseConnection["Session"]):
         >>> import streamlit as st
         >>>
         >>> conn = st.connection("snowpark")
-        >>> df = conn.query("select * from pet_owners")
+        >>> df = conn.query("SELECT * FROM pet_owners")
         >>> st.dataframe(df)
         """
         from snowflake.snowpark.exceptions import (  # type:ignore[import]
@@ -207,7 +206,7 @@ class SnowparkConnection(BaseConnection["Session"]):
         >>> conn = st.connection("snowpark")
         >>> with conn.safe_session() as session:
         ...     df = session.table("mytable").limit(10).to_pandas()
-        ...
+        >>>
         >>> st.dataframe(df)
         """
         with self._lock:

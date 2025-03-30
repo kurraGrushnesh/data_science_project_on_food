@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping, TypeVar
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, TypeVar
 
-from streamlit import type_util
+from streamlit import dataframe_util
 from streamlit.errors import StreamlitAPIException
-from streamlit.proto.Arrow_pb2 import Arrow as ArrowProto
 
 if TYPE_CHECKING:
     from pandas import DataFrame
     from pandas.io.formats.style import Styler
+
+    from streamlit.proto.Arrow_pb2 import Arrow as ArrowProto
 
 
 def marshall_styler(proto: ArrowProto, styler: Styler, default_uuid: str) -> None:
@@ -137,7 +139,7 @@ def _marshall_styles(
         cellstyle = styles["cellstyle"]
         cellstyle = _trim_pandas_styles(cellstyle)
         for style in cellstyle:
-            rule = _pandas_style_to_css("cell_style", style, styler.uuid)
+            rule = _pandas_style_to_css("cell_style", style, styler.uuid, separator="_")
             css_rules.append(rule)
 
     if len(css_rules) > 0:
@@ -166,7 +168,7 @@ def _pandas_style_to_css(
     style_type: str,
     style: Mapping[str, Any],
     uuid: str,
-    separator: str = "",
+    separator: str = "_",
 ) -> str:
     """Convert pandas.Styler translated style to CSS.
 
@@ -187,7 +189,7 @@ def _pandas_style_to_css(
     """
     declarations = []
     for css_property, css_value in style["props"]:
-        declaration = css_property.strip() + ": " + css_value.strip()
+        declaration = str(css_property).strip() + ": " + str(css_value).strip()
         declarations.append(declaration)
 
     table_selector = f"#T_{uuid}"
@@ -235,7 +237,9 @@ def _marshall_display_values(
 
     """
     new_df = _use_display_values(df, styles)
-    proto.styler.display_values = type_util.data_frame_to_bytes(new_df)
+    proto.styler.display_values = dataframe_util.convert_pandas_df_to_arrow_bytes(
+        new_df
+    )
 
 
 def _use_display_values(df: DataFrame, styles: Mapping[str, Any]) -> DataFrame:
@@ -265,6 +269,6 @@ def _use_display_values(df: DataFrame, styles: Mapping[str, Any]) -> DataFrame:
                 if "id" in cell:
                     if match := cell_selector_regex.match(cell["id"]):
                         r, c = map(int, match.groups())
-                        new_df.iat[r, c] = str(cell["display_value"])
+                        new_df.iloc[r, c] = str(cell["display_value"])
 
     return new_df

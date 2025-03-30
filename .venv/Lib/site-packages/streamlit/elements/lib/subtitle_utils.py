@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import os
 import re
@@ -22,6 +21,7 @@ from pathlib import Path
 
 from streamlit import runtime
 from streamlit.runtime import caching
+from streamlit.util import calc_md5
 
 # Regular expression to match the SRT timestamp format
 # It matches the
@@ -73,10 +73,12 @@ def _srt_to_vtt(srt_data: str | bytes) -> bytes:
     Convert subtitles from SubRip (.srt) format to WebVTT (.vtt) format.
     This function accepts the content of the .srt file either as a string
     or as a BytesIO stream.
+
     Parameters
     ----------
     srt_data : str or bytes
         The content of the .srt file as a string or a bytes stream.
+
     Returns
     -------
     bytes
@@ -150,7 +152,6 @@ def process_subtitle_data(
     data: str | bytes | Path | io.BytesIO,
     label: str,
 ) -> str:
-
     # Determine the type of data and process accordingly
     if isinstance(data, (str, Path)):
         subtitle_data = _handle_string_or_path_data(data)
@@ -162,7 +163,7 @@ def process_subtitle_data(
         raise TypeError(f"Invalid binary data format for subtitle: {type(data)}.")
 
     if runtime.exists():
-        filename = hashlib.md5(label.encode()).hexdigest()
+        filename = calc_md5(label.encode())
         # Save the processed data and return the file URL
         file_url = runtime.get_instance().media_file_mgr.add(
             path_or_data=subtitle_data,

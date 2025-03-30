@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import collections
+import collections.abc
 import dataclasses
 import datetime
 import functools
@@ -31,26 +32,29 @@ import threading
 import uuid
 import weakref
 from enum import Enum
-from typing import Any, Callable, Dict, Final, Pattern, Type, Union
+from re import Pattern
+from types import MappingProxyType
+from typing import Any, Callable, Final, Union, cast
 
 from typing_extensions import TypeAlias
 
-from streamlit import type_util, util
+from streamlit import logger, type_util, util
 from streamlit.errors import StreamlitAPIException
 from streamlit.runtime.caching.cache_errors import UnhashableTypeError
 from streamlit.runtime.caching.cache_type import CacheType
 from streamlit.runtime.uploaded_file_manager import UploadedFile
-from streamlit.util import HASHLIB_KWARGS
+
+_LOGGER: Final = logger.get_logger(__name__)
 
 # If a dataframe has more than this many rows, we consider it large and hash a sample.
-_PANDAS_ROWS_LARGE: Final = 100000
-_PANDAS_SAMPLE_SIZE: Final = 10000
+_PANDAS_ROWS_LARGE: Final = 50_000
+_PANDAS_SAMPLE_SIZE: Final = 10_000
 
 # Similar to dataframes, we also sample large numpy arrays.
-_NP_SIZE_LARGE: Final = 1000000
-_NP_SAMPLE_SIZE: Final = 100000
+_NP_SIZE_LARGE: Final = 500_000
+_NP_SAMPLE_SIZE: Final = 100_000
 
-HashFuncsDict: TypeAlias = Dict[Union[str, Type[Any]], Callable[[Any], Any]]
+HashFuncsDict: TypeAlias = dict[Union[str, type[Any]], Callable[[Any], Any]]
 
 # Arbitrary item to denote where we found a cycle in a hashed object.
 # This allows us to hash self-referencing lists, dictionaries, etc.
@@ -202,9 +206,9 @@ class _HashStacks:
     """Stacks of what has been hashed, with at most 1 stack per thread."""
 
     def __init__(self):
-        self._stacks: weakref.WeakKeyDictionary[
-            threading.Thread, _HashStack
-        ] = weakref.WeakKeyDictionary()
+        self._stacks: weakref.WeakKeyDictionary[threading.Thread, _HashStack] = (
+            weakref.WeakKeyDictionary()
+        )
 
     def __repr__(self) -> str:
         return util.repr_(self)
@@ -348,7 +352,7 @@ class _CacheFuncHasher:
         runs.
         """
 
-        h = hashlib.new("md5", **HASHLIB_KWARGS)
+        h = hashlib.new("md5", usedforsecurity=False)
 
         if type_util.is_type(obj, "unittest.mock.Mock") or type_util.is_type(
             obj, "unittest.mock.MagicMock"
@@ -405,15 +409,15 @@ class _CacheFuncHasher:
         elif obj is False:
             return b"0"
 
-        elif dataclasses.is_dataclass(obj):
+        elif not isinstance(obj, type) and dataclasses.is_dataclass(obj):
             return self.to_bytes(dataclasses.asdict(obj))
-
         elif isinstance(obj, Enum):
             return str(obj).encode()
 
         elif type_util.is_type(obj, "pandas.core.series.Series"):
             import pandas as pd
 
+            obj = cast("pd.Series", obj)
             self.update(h, obj.size)
             self.update(h, obj.dtype.name)
 
@@ -421,9 +425,14 @@ class _CacheFuncHasher:
                 obj = obj.sample(n=_PANDAS_SAMPLE_SIZE, random_state=0)
 
             try:
-                self.update(h, pd.util.hash_pandas_object(obj).values.tobytes())
+                self.update(h, pd.util.hash_pandas_object(obj).to_numpy().tobytes())
                 return h.digest()
             except TypeError:
+                _LOGGER.warning(
+                    "Pandas Series hash failed. Falling back to pickling the object.",
+                    exc_info=True,
+                )
+
                 # Use pickle if pandas cannot hash the object for example if
                 # it contains unhashable objects.
                 return b"%s" % pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
@@ -431,6 +440,7 @@ class _CacheFuncHasher:
         elif type_util.is_type(obj, "pandas.core.frame.DataFrame"):
             import pandas as pd
 
+            obj = cast("pd.DataFrame", obj)
             self.update(h, obj.shape)
 
             if len(obj) >= _PANDAS_ROWS_LARGE:
@@ -444,11 +454,71 @@ class _CacheFuncHasher:
                 self.update(h, values_hash_bytes)
                 return h.digest()
             except TypeError:
+                _LOGGER.warning(
+                    "Pandas DataFrame hash failed. Falling back to pickling the object.",
+                    exc_info=True,
+                )
+
                 # Use pickle if pandas cannot hash the object for example if
                 # it contains unhashable objects.
                 return b"%s" % pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
 
+        elif type_util.is_type(obj, "polars.series.series.Series"):
+            import polars as pl  # type: ignore[import-not-found]
+
+            obj = cast("pl.Series", obj)
+            self.update(h, str(obj.dtype).encode())
+            self.update(h, obj.shape)
+
+            if len(obj) >= _PANDAS_ROWS_LARGE:
+                obj = obj.sample(n=_PANDAS_SAMPLE_SIZE, seed=0)
+
+            try:
+                self.update(h, obj.hash(seed=0).to_arrow().to_string().encode())
+                return h.digest()
+            except TypeError:
+                _LOGGER.warning(
+                    "Polars Series hash failed. Falling back to pickling the object.",
+                    exc_info=True,
+                )
+
+                # Use pickle if polars cannot hash the object for example if
+                # it contains unhashable objects.
+                return b"%s" % pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
+        elif type_util.is_type(obj, "polars.dataframe.frame.DataFrame"):
+            import polars as pl  # noqa: TC002
+
+            obj = cast("pl.DataFrame", obj)
+            self.update(h, obj.shape)
+
+            if len(obj) >= _PANDAS_ROWS_LARGE:
+                obj = obj.sample(n=_PANDAS_SAMPLE_SIZE, seed=0)
+            try:
+                for c, t in obj.schema.items():
+                    self.update(h, c.encode())
+                    self.update(h, str(t).encode())
+
+                values_hash_bytes = (
+                    obj.hash_rows(seed=0).hash(seed=0).to_arrow().to_string().encode()
+                )
+
+                self.update(h, values_hash_bytes)
+                return h.digest()
+            except TypeError:
+                _LOGGER.warning(
+                    "Polars DataFrame hash failed. Falling back to pickling the object.",
+                    exc_info=True,
+                )
+
+                # Use pickle if polars cannot hash the object for example if
+                # it contains unhashable objects.
+                return b"%s" % pickle.dumps(obj, pickle.HIGHEST_PROTOCOL)
         elif type_util.is_type(obj, "numpy.ndarray"):
+            import numpy as np
+
+            # write cast type as string to make it work with our Python 3.8 tests
+            # - can be removed once we sunset support for Python 3.8
+            obj = cast("np.ndarray[Any, Any]", obj)
             self.update(h, obj.shape)
             self.update(h, str(obj.dtype))
 
@@ -462,6 +532,9 @@ class _CacheFuncHasher:
             return h.digest()
         elif type_util.is_type(obj, "PIL.Image.Image"):
             import numpy as np
+            from PIL.Image import Image  # noqa: TC002
+
+            obj = cast("Image", obj)
 
             # we don't just hash the results of obj.tobytes() because we want to use
             # the sampling logic for numpy data
@@ -471,8 +544,8 @@ class _CacheFuncHasher:
         elif inspect.isbuiltin(obj):
             return bytes(obj.__name__.encode())
 
-        elif type_util.is_type(obj, "builtins.mappingproxy") or type_util.is_type(
-            obj, "builtins.dict_items"
+        elif isinstance(obj, MappingProxyType) or isinstance(
+            obj, collections.abc.ItemsView
         ):
             return self.to_bytes(dict(obj))
 

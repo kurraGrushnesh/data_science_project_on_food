@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,24 +18,13 @@ import asyncio
 import os
 import signal
 import sys
-from pathlib import Path
 from typing import Any, Final
 
-from streamlit import (
-    cli_util,
-    config,
-    env_util,
-    file_util,
-    net_util,
-    secrets,
-    util,
-    version,
-)
+from streamlit import cli_util, config, env_util, file_util, net_util, secrets
 from streamlit.config import CONFIG_FILENAMES
 from streamlit.git_util import MIN_GIT_VERSION, GitRepo
 from streamlit.logger import get_logger
-from streamlit.source_util import invalidate_pages_cache
-from streamlit.watcher import report_watchdog_availability, watch_dir, watch_file
+from streamlit.watcher import report_watchdog_availability, watch_file
 from streamlit.web.server import Server, server_address_is_unix_socket, server_util
 
 _LOGGER: Final = get_logger(__name__)
@@ -117,7 +106,6 @@ def _on_server_start(server: Server) -> None:
     _maybe_print_static_folder_warning(server.main_script_path)
     _print_url(server.is_running_hello)
     report_watchdog_availability()
-    _print_new_version_message()
 
     # Load secrets.toml if it exists. If the file doesn't exist, this
     # function will return without raising an exception. We catch any parse
@@ -125,7 +113,7 @@ def _on_server_start(server: Server) -> None:
     try:
         secrets.load_if_toml_exists()
     except Exception as ex:
-        _LOGGER.error(f"Failed to load secrets.toml file", exc_info=ex)
+        _LOGGER.error("Failed to load secrets.toml file", exc_info=ex)
 
     def maybe_open_browser():
         if config.get_option("server.headless"):
@@ -142,62 +130,18 @@ def _on_server_start(server: Server) -> None:
         else:
             addr = "localhost"
 
-        util.open_browser(server_util.get_url(addr))
+        cli_util.open_browser(server_util.get_url(addr))
 
     # Schedule the browser to open on the main thread.
     asyncio.get_running_loop().call_soon(maybe_open_browser)
 
 
 def _fix_pydeck_mapbox_api_warning() -> None:
-    """Sets MAPBOX_API_KEY environment variable needed for PyDeck otherwise it will throw an exception"""
+    """Sets MAPBOX_API_KEY environment variable needed for PyDeck otherwise it
+    will throw an exception.
+    """
 
     os.environ["MAPBOX_API_KEY"] = config.get_option("mapbox.token")
-
-
-def _fix_pydantic_duplicate_validators_error():
-    """Pydantic by default disallows to reuse of validators with the same name,
-    this combined with the Streamlit execution model leads to an error on the second
-    Streamlit script rerun if the Pydantic validator is registered
-    in the streamlit script.
-
-    It is important to note that the same issue exists for Pydantic validators inside
-    Jupyter notebooks, https://github.com/pydantic/pydantic/issues/312 and in order
-    to fix that in Pydantic they use the `in_ipython` function that checks that
-    Pydantic runs not in `ipython` environment.
-
-    Inside this function we patch `in_ipython` function to always return `True`.
-
-    This change will relax rules for writing Pydantic validators inside
-    Streamlit script a little bit, similar to how it works in jupyter,
-    which should not be critical.
-    """
-    try:
-        from pydantic import class_validators
-
-        class_validators.in_ipython = lambda: True  # type: ignore[attr-defined]
-    except ImportError:
-        pass
-
-
-def _print_new_version_message() -> None:
-    if version.should_show_new_version_notice():
-        NEW_VERSION_TEXT: Final = """
-  %(new_version)s
-
-  See what's new at https://discuss.streamlit.io/c/announcements
-
-  Enter the following command to upgrade:
-  %(prompt)s %(command)s
-""" % {
-            "new_version": cli_util.style_for_cli(
-                "A new version of Streamlit is available.", fg="blue", bold=True
-            ),
-            "prompt": cli_util.style_for_cli("$", fg="blue"),
-            "command": cli_util.style_for_cli(
-                "pip install streamlit --upgrade", bold=True
-            ),
-        }
-        cli_util.print_to_cli(NEW_VERSION_TEXT)
 
 
 def _maybe_print_static_folder_warning(main_script_path: str) -> None:
@@ -250,15 +194,6 @@ def _print_url(is_running_hello: bool) -> None:
             ("Unix Socket", config.get_option("server.address")),
         ]
 
-    elif config.get_option("server.headless"):
-        internal_ip = net_util.get_internal_ip()
-        if internal_ip:
-            named_urls.append(("Network URL", server_util.get_url(internal_ip)))
-
-        external_ip = net_util.get_external_ip()
-        if external_ip:
-            named_urls.append(("External URL", server_util.get_url(external_ip)))
-
     else:
         named_urls = [
             ("Local URL", server_util.get_url("localhost")),
@@ -267,6 +202,11 @@ def _print_url(is_running_hello: bool) -> None:
         internal_ip = net_util.get_internal_ip()
         if internal_ip:
             named_urls.append(("Network URL", server_util.get_url(internal_ip)))
+
+        if config.get_option("server.headless"):
+            external_ip = net_util.get_external_ip()
+            if external_ip:
+                named_urls.append(("External URL", server_util.get_url(external_ip)))
 
     cli_util.print_to_cli("")
     cli_util.print_to_cli("  %s" % title_message, fg="blue", bold=True)
@@ -332,10 +272,13 @@ def load_config_options(flag_options: dict[str, Any]) -> None:
         A dict of config options where the keys are the CLI flag version of the
         config option names.
     """
+    # We want to filter out two things: values that are None, and values that
+    # are empty tuples. The latter is a special case that indicates that the
+    # no values were provided, and the config should reset to the default
     options_from_flags = {
         name.replace("_", "."): val
         for name, val in flag_options.items()
-        if val is not None
+        if val is not None and val != ()
     }
 
     # Force a reparse of config files (if they exist). The result is cached
@@ -352,26 +295,13 @@ def _install_config_watchers(flag_options: dict[str, Any]) -> None:
             watch_file(filename, on_config_changed)
 
 
-def _install_pages_watcher(main_script_path_str: str) -> None:
-    def _on_pages_changed(_path: str) -> None:
-        invalidate_pages_cache()
-
-    main_script_path = Path(main_script_path_str)
-    pages_dir = main_script_path.parent / "pages"
-
-    watch_dir(
-        str(pages_dir),
-        _on_pages_changed,
-        glob_pattern="*.py",
-        allow_nonexistent=True,
-    )
-
-
 def run(
     main_script_path: str,
     is_hello: bool,
     args: list[str],
     flag_options: dict[str, Any],
+    *,
+    stop_immediately_for_testing: bool = False,
 ) -> None:
     """Run a script in a separate thread and start a server for the app.
 
@@ -381,9 +311,7 @@ def run(
     _fix_tornado_crash()
     _fix_sys_argv(main_script_path, args)
     _fix_pydeck_mapbox_api_warning()
-    _fix_pydantic_duplicate_validators_error()
     _install_config_watchers(flag_options)
-    _install_pages_watcher(main_script_path)
 
     # Create the server. It won't start running yet.
     server = Server(main_script_path, is_hello)
@@ -397,9 +325,31 @@ def run(
         # and close all our threads
         _set_up_signal_handler(server)
 
+        # return immediately if we're testing the server start
+        if stop_immediately_for_testing:
+            _LOGGER.debug("Stopping server immediately for testing")
+            server.stop()
+
         # Wait until `Server.stop` is called, either by our signal handler, or
         # by a debug websocket session.
         await server.stopped
 
     # Run the server. This function will not return until the server is shut down.
-    asyncio.run(run_server())
+    # FIX RuntimeError: asyncio.run() cannot be called from a running event loop on Python 3.10.16
+    # asyncio.run(run_server())
+
+    # Define a main function to handle the event loop logic
+    async def main():
+        await run_server()
+
+    try:
+        # Check if we're already in an event loop
+        if asyncio.get_running_loop().is_running():
+            # Use `asyncio.create_task` if we're in an async context
+            asyncio.create_task(main())
+        else:
+            # Otherwise, use `asyncio.run`
+            asyncio.run(main())
+    except RuntimeError:
+        # get_running_loop throws RuntimeError if no running event loop
+        asyncio.run(main())

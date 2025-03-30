@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ FloatOrInt: TypeAlias = Union[int, float]
 def _check_float_between(value: float, low: float = 0.0, high: float = 1.0) -> bool:
     """
     Checks given value is 'between' the bounds of [low, high],
-    considering close values around bounds are acceptable input
+    considering close values around bounds are acceptable input.
 
     Notes
     -----
@@ -104,26 +104,20 @@ class ProgressMixin:
 
         text : str or None
             A message to display above the progress bar. The text can optionally
-            contain Markdown and supports the following elements: Bold, Italics,
-            Strikethroughs, Inline Code, Emojis, and Links.
+            contain GitHub-flavored Markdown of the following types: Bold, Italics,
+            Strikethroughs, Inline Code, Links, and Images. Images display like
+            icons, with a max height equal to the font height.
 
-            This also supports:
+            Unsupported Markdown elements are unwrapped so only their children
+            (text contents) render. Display unsupported elements as literal
+            characters by backslash-escaping them. E.g.,
+            ``"1\. Not an ordered list"``.
 
-            * Emoji shortcodes, such as ``:+1:``  and ``:sunglasses:``.
-              For a list of all supported codes,
-              see https://share.streamlit.io/streamlit/emoji-shortcodes.
+            See the ``body`` parameter of |st.markdown|_ for additional,
+            supported Markdown directives.
 
-            * LaTeX expressions, by wrapping them in "$" or "$$" (the "$$"
-              must be on their own lines). Supported LaTeX functions are listed
-              at https://katex.org/docs/supported.html.
-
-            * Colored text, using the syntax ``:color[text to be colored]``,
-              where ``color`` needs to be replaced with any of the following
-              supported colors: blue, green, orange, red, violet, gray/grey, rainbow.
-
-            Unsupported elements are unwrapped so only their children (text contents) render.
-            Display unsupported elements as literal characters by
-            backslash-escaping them. E.g. ``1\. Not an ordered list``.
+            .. |st.markdown| replace:: ``st.markdown``
+            .. _st.markdown: https://docs.streamlit.io/develop/api-reference/text/st.markdown
 
         Example
         -------

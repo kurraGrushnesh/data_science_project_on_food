@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,7 +61,7 @@ class CacheStat(NamedTuple):
 
 
 def group_stats(stats: list[CacheStat]) -> list[CacheStat]:
-    """Group a list of CacheStats by category_name and cache_name and sum byte_length"""
+    """Group a list of CacheStats by category_name and cache_name and sum byte_length."""
 
     def key_function(individual_stat):
         return individual_stat.category_name, individual_stat.cache_name
@@ -76,7 +76,7 @@ def group_stats(stats: list[CacheStat]) -> list[CacheStat]:
             CacheStat(
                 category_name=category_name,
                 cache_name=cache_name,
-                byte_length=sum(map(lambda item: item.byte_length, single_group_stats)),
+                byte_length=sum(item.byte_length for item in single_group_stats),
             )
         )
     return result

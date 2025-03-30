@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import io
 from abc import abstractmethod
-from typing import NamedTuple, Protocol, Sequence
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from streamlit import util
-from streamlit.proto.Common_pb2 import FileURLs as FileURLsProto
 from streamlit.runtime.stats import CacheStatsProvider
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from streamlit.proto.Common_pb2 import FileURLs as FileURLsProto
 
 
 class UploadedFileRec(NamedTuple):
@@ -33,7 +37,7 @@ class UploadedFileRec(NamedTuple):
 
 
 class UploadFileUrlInfo(NamedTuple):
-    """Information we provide for single file in get_upload_urls"""
+    """Information we provide for single file in get_upload_urls."""
 
     file_id: str
     upload_url: str
@@ -42,13 +46,14 @@ class UploadFileUrlInfo(NamedTuple):
 
 class DeletedFile(NamedTuple):
     """Represents a deleted file in deserialized values for st.file_uploader and
-    st.camera_input
+    st.camera_input.
 
     Return this from st.file_uploader and st.camera_input deserialize (so they can
     be used in session_state), when widget value contains file record that is missing
     from the storage.
     DeleteFile instances filtered out before return final value to the user in script,
-    or before sending to frontend."""
+    or before sending to frontend.
+    """
 
     file_id: str
 

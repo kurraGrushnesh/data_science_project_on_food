@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,21 +14,24 @@
 
 from __future__ import annotations
 
+import copy
 import json
+from collections.abc import Mapping
 from enum import Enum
-from typing import TYPE_CHECKING, Dict, Final, Literal, Mapping, Union
+from typing import TYPE_CHECKING, Final, Literal, Union
 
 from typing_extensions import TypeAlias
 
+from streamlit.dataframe_util import DataFormat
 from streamlit.elements.lib.column_types import ColumnConfig, ColumnType
 from streamlit.elements.lib.dicttools import remove_none_values
 from streamlit.errors import StreamlitAPIException
-from streamlit.proto.Arrow_pb2 import Arrow as ArrowProto
-from streamlit.type_util import DataFormat, is_colum_type_arrow_incompatible
 
 if TYPE_CHECKING:
     import pyarrow as pa
     from pandas import DataFrame, Index, Series
+
+    from streamlit.proto.Arrow_pb2 import Arrow as ArrowProto
 
 
 # The index identifier can be used to apply configuration options
@@ -65,7 +68,7 @@ class ColumnDataKind(str, Enum):
 # The dataframe schema is a mapping from the name of the column
 # in the underlying dataframe to the column data kind.
 # The index column uses `_index` as name.
-DataframeSchema: TypeAlias = Dict[str, ColumnDataKind]
+DataframeSchema: TypeAlias = dict[str, ColumnDataKind]
 
 # This mapping contains all editable column types mapped to the data kinds
 # that the column type is compatible for editing.
@@ -139,7 +142,6 @@ def _determine_data_kind_via_arrow(field: pa.Field) -> ColumnDataKind:
 
     Parameters
     ----------
-
     field : pa.Field
         The arrow field from the arrow table schema.
 
@@ -372,7 +374,6 @@ def determine_dataframe_schema(
 
     Returns
     -------
-
     DataframeSchema
         A mapping that contains the detected data type for the index and columns.
         The key is the column name in the underlying dataframe or ``_index`` for index columns.
@@ -394,7 +395,7 @@ def determine_dataframe_schema(
 
 
 # A mapping of column names/IDs to column configs.
-ColumnConfigMapping: TypeAlias = Dict[Union[IndexIdentifierType, str], ColumnConfig]
+ColumnConfigMapping: TypeAlias = dict[Union[IndexIdentifierType, str], ColumnConfig]
 ColumnConfigMappingInput: TypeAlias = Mapping[
     Union[IndexIdentifierType, str],
     Union[ColumnConfig, None, str],
@@ -427,7 +428,9 @@ def process_config_mapping(
         elif isinstance(config, str):
             transformed_column_config[column] = ColumnConfig(label=config)
         elif isinstance(config, dict):
-            transformed_column_config[column] = config
+            # Ensure that the column config objects are cloned
+            # since we will apply in-place changes to it.
+            transformed_column_config[column] = copy.deepcopy(config)
         else:
             raise StreamlitAPIException(
                 f"Invalid column config for column `{column}`. "
@@ -443,7 +446,6 @@ def update_column_config(
 
     Parameters
     ----------
-
     column_config_mapping : ColumnConfigMapping
         The column config mapping to update.
 
@@ -462,9 +464,7 @@ def update_column_config(
 
 def apply_data_specific_configs(
     columns_config: ColumnConfigMapping,
-    data_df: DataFrame,
     data_format: DataFormat,
-    check_arrow_compatibility: bool = False,
 ) -> None:
     """Apply data specific configurations to the provided dataframe.
 
@@ -476,24 +476,9 @@ def apply_data_specific_configs(
     columns_config : ColumnConfigMapping
         A mapping of column names/ids to column configurations.
 
-    data_df : pd.DataFrame
-        The dataframe to apply the configurations to.
-
     data_format : DataFormat
         The format of the data.
-
-    check_arrow_compatibility : bool
-        Whether to check if the data is compatible with arrow.
     """
-    import pandas as pd
-
-    # Deactivate editing for columns that are not compatible with arrow
-    if check_arrow_compatibility:
-        for column_name, column_data in data_df.items():
-            if is_colum_type_arrow_incompatible(column_data):
-                update_column_config(columns_config, column_name, {"disabled": True})
-                # Convert incompatible type to string
-                data_df[column_name] = column_data.astype("string")
 
     # Pandas adds a range index as default to all datastructures
     # but for most of the non-pandas data objects it is unnecessary
@@ -507,25 +492,16 @@ def apply_data_specific_configs(
         DataFormat.LIST_OF_RECORDS,
         DataFormat.LIST_OF_ROWS,
         DataFormat.COLUMN_VALUE_MAPPING,
+        # Dataframe-like objects that don't have an index:
+        DataFormat.PANDAS_ARRAY,
+        DataFormat.PANDAS_INDEX,
+        DataFormat.POLARS_DATAFRAME,
+        DataFormat.POLARS_SERIES,
+        DataFormat.POLARS_LAZYFRAME,
+        DataFormat.PYARROW_ARRAY,
+        DataFormat.RAY_DATASET,
     ]:
         update_column_config(columns_config, INDEX_IDENTIFIER, {"hidden": True})
-
-    # Rename the first column to "value" for some of the data formats
-    if data_format in [
-        DataFormat.SET_OF_VALUES,
-        DataFormat.TUPLE_OF_VALUES,
-        DataFormat.LIST_OF_VALUES,
-        DataFormat.NUMPY_LIST,
-        DataFormat.KEY_VALUE_DICT,
-    ]:
-        # Pandas automatically names the first column "0"
-        # We rename it to "value" in selected cases to make it more descriptive
-        data_df.rename(columns={0: "value"}, inplace=True)
-
-    if not isinstance(data_df.index, pd.RangeIndex):
-        # If the index is not a range index, we will configure it as required
-        # since the user is required to provide a (unique) value for editing.
-        update_column_config(columns_config, INDEX_IDENTIFIER, {"required": True})
 
 
 def _convert_column_config_to_json(column_config_mapping: ColumnConfigMapping) -> str:

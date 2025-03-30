@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,16 +14,20 @@
 
 from __future__ import annotations
 
-from streamlit.runtime.caching.storage import CacheStorageManager
+from typing import TYPE_CHECKING
+
 from streamlit.runtime.caching.storage.local_disk_cache_storage import (
     LocalDiskCacheStorageManager,
 )
+
+if TYPE_CHECKING:
+    from streamlit.runtime.caching.storage import CacheStorageManager
 
 
 def create_default_cache_storage_manager() -> CacheStorageManager:
     """
     Get the cache storage manager.
-    It would be used both in server.py and in cli.py to have unified cache storage
+    It would be used both in server.py and in cli.py to have unified cache storage.
 
     Returns
     -------

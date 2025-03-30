@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,15 +14,18 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import tornado.httputil
 import tornado.web
 
 from streamlit import config
-from streamlit.runtime.memory_uploaded_file_manager import MemoryUploadedFileManager
 from streamlit.runtime.uploaded_file_manager import UploadedFileRec
 from streamlit.web.server import routes, server_util
+from streamlit.web.server.server_util import is_xsrf_enabled
+
+if TYPE_CHECKING:
+    from streamlit.runtime.memory_uploaded_file_manager import MemoryUploadedFileManager
 
 
 class UploadFileRequestHandler(tornado.web.RequestHandler):
@@ -49,7 +52,7 @@ class UploadFileRequestHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header("Access-Control-Allow-Methods", "PUT, OPTIONS, DELETE")
         self.set_header("Access-Control-Allow-Headers", "Content-Type")
-        if config.get_option("server.enableXsrfProtection"):
+        if is_xsrf_enabled():
             self.set_header(
                 "Access-Control-Allow-Origin",
                 server_util.get_url(config.get_option("browser.serverAddress")),
@@ -98,7 +101,7 @@ class UploadFileRequestHandler(tornado.web.RequestHandler):
 
         try:
             if not self._is_active_session(session_id):
-                raise Exception(f"Invalid session_id")
+                raise Exception("Invalid session_id")
         except Exception as e:
             self.send_error(400, reason=str(e))
             return

@@ -1,4 +1,4 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2024)
+# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022-2025)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,20 @@
 from __future__ import annotations
 
 import time
-from types import TracebackType
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
-from typing_extensions import TypeAlias
+from typing_extensions import Self, TypeAlias
 
-from streamlit.cursor import Cursor
-from streamlit.delta_generator import DeltaGenerator, _enqueue_message
+from streamlit.delta_generator import DeltaGenerator
 from streamlit.errors import StreamlitAPIException
 from streamlit.proto.Block_pb2 import Block as BlockProto
 from streamlit.proto.ForwardMsg_pb2 import ForwardMsg
+from streamlit.runtime.scriptrunner_utils.script_run_context import enqueue_message
+
+if TYPE_CHECKING:
+    from types import TracebackType
+
+    from streamlit.cursor import Cursor
 
 States: TypeAlias = Literal["running", "complete", "error"]
 
@@ -44,9 +48,9 @@ class StatusContainer(DeltaGenerator):
         if state == "running":
             expandable_proto.icon = "spinner"
         elif state == "complete":
-            expandable_proto.icon = "check"
+            expandable_proto.icon = ":material/check:"
         elif state == "error":
-            expandable_proto.icon = "error"
+            expandable_proto.icon = ":material/error:"
         else:
             raise StreamlitAPIException(
                 f"Unknown state ({state}). Must be one of 'running', 'complete', or 'error'."
@@ -61,7 +65,7 @@ class StatusContainer(DeltaGenerator):
         )
 
         status_container = cast(
-            StatusContainer,
+            "StatusContainer",
             parent._block(block_proto=block_proto, dg_type=StatusContainer),
         )
 
@@ -137,9 +141,9 @@ class StatusContainer(DeltaGenerator):
             if state == "running":
                 msg.delta.add_block.expandable.icon = "spinner"
             elif state == "complete":
-                msg.delta.add_block.expandable.icon = "check"
+                msg.delta.add_block.expandable.icon = ":material/check:"
             elif state == "error":
-                msg.delta.add_block.expandable.icon = "error"
+                msg.delta.add_block.expandable.icon = ":material/error:"
             else:
                 raise StreamlitAPIException(
                     f"Unknown state ({state}). Must be one of 'running', 'complete', or 'error'."
@@ -147,9 +151,9 @@ class StatusContainer(DeltaGenerator):
             self._current_state = state
 
         self._current_proto = msg.delta.add_block
-        _enqueue_message(msg)
+        enqueue_message(msg)
 
-    def __enter__(self) -> StatusContainer:  # type: ignore[override]
+    def __enter__(self) -> Self:  # type: ignore[override]
         # This is a little dubious: we're returning a different type than
         # our superclass' `__enter__` function. Maybe DeltaGenerator.__enter__
         # should always return `self`?
