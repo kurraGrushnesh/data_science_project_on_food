@@ -1,4 +1,4 @@
-# 🚀 Setup & Usage
+# 🚀 Setup & Usage:
 
 ### 1. Clone the Repository
 git clone https://github.com/kurraGrushnesh/data_science_project_on_food.git                   
