@@ -52,7 +52,7 @@ Quick Search: Find recipes by name in sidebar
 Complete Instructions: Steps, prep time, servings & images                                     
 Personalized: Filters by cooking time and serving size                                         
                                                                                               
-# **Project Structure:**
+# **Project Structure:**    
 food_recipe_generator/                                                                         
 │                                                                                              
 ├── .venv/                   # Virtual environment                                             
