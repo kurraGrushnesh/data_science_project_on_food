@@ -1,21 +1,85 @@
 import pandas as pd
-import os
 from pathlib import Path
 
-def save_recipes_to_csv():
-    # Sample data (replace with your actual data loading logic)
-    recipes = [
+def save_recipes_to_csv(input_data=None, output_path="data/processed/recipes.csv"):
+    """
+    Save recipe data to CSV file with consistent formatting.
+
+    Args:
+        input_data: List of recipe dictionaries or path to JSON file
+        output_path: Destination path for the CSV file
+
+    Sample CSV format:
+        name,ingredients,steps,cuisine,cooking_time
+        Vegetable Stir Fry,"bell pepper,carrot,rice,soy sauce",Chop vegetables|Heat oil|Stir fry for 5 minutes,Asian,15
+        Chicken Curry,"chicken,curry powder,coconut milk,onion",Brown chicken|Sauté onions|Simmer in sauce,Indian,30
+        Pasta Aglio e Olio,"pasta,garlic,olive oil,red pepper flakes",Boil pasta|Sauté garlic|Combine,Italian,20
+    """
+    # Create directory if needed
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # Default sample data matching the requested format
+    default_recipes = [
         {
             "name": "Vegetable Stir Fry",
-            "ingredients": "bell pepper,carrot,rice",
-            "steps": "Chop vegetables...|Stir fry...",
-            "cuisine": "Asian"
+            "ingredients": ["bell pepper", "carrot", "rice", "soy sauce"],
+            "steps": ["Chop vegetables", "Heat oil", "Stir fry for 5 minutes"],
+            "cuisine": "Asian",
+            "cooking_time": 15
+        },
+        {
+            "name": "Chicken Curry",
+            "ingredients": ["chicken", "curry powder", "coconut milk", "onion"],
+            "steps": ["Brown chicken", "Sauté onions", "Simmer in sauce"],
+            "cuisine": "Indian",
+            "cooking_time": 30
+        },
+        {
+            "name": "Pasta Aglio e Olio",
+            "ingredients": ["pasta", "garlic", "olive oil", "red pepper flakes"],
+            "steps": ["Boil pasta", "Sauté garlic", "Combine"],
+            "cuisine": "Italian",
+            "cooking_time": 20
         }
     ]
 
-    # Create directory if needed
-    Path("data/processed").mkdir(parents=True, exist_ok=True)
+    # Load data (either from input or use default sample if none provided)
+    if input_data is None:
+        print("Using default sample data")
+        recipes = default_recipes
+    elif isinstance(input_data, str) and input_data.endswith('.json'):
+        recipes = pd.read_json(input_data).to_dict('records')
+    else:
+        recipes = input_data
 
-    # Save as CSV
-    pd.DataFrame(recipes).to_csv("data/processed/recipes.csv", index=False)
-    print("Saved recipes to data/processed/recipes.csv")
+    # Convert list fields to consistent string format
+    for recipe in recipes:
+        # Ensure all required fields exist
+        recipe.setdefault('name', 'Unnamed Recipe')
+        recipe.setdefault('ingredients', [])
+        recipe.setdefault('steps', [])
+        recipe.setdefault('cuisine', 'Unknown')
+        recipe.setdefault('cooking_time', 0)
+
+        # Convert lists to strings
+        if isinstance(recipe['ingredients'], list):
+            recipe['ingredients'] = ",".join(recipe['ingredients'])
+        if isinstance(recipe['steps'], list):
+            recipe['steps'] = "|".join(recipe['steps'])
+
+    # Save as CSV with the exact requested format
+    pd.DataFrame(recipes).to_csv(
+        output_path,
+        index=False,
+        columns=["name", "ingredients", "steps", "cuisine", "cooking_time"]
+    )
+    print(f"Saved recipes to {output_path}")
+    print("Format:")
+    print("name,ingredients,steps,cuisine,cooking_time")
+    print('Vegetable Stir Fry,"bell pepper,carrot,rice,soy sauce",Chop vegetables|Heat oil|Stir fry for 5 minutes,Asian,15')
+    print('Chicken Curry,"chicken,curry powder,coconut milk,onion",Brown chicken|Sauté onions|Simmer in sauce,Indian,30')
+    print('Pasta Aglio e Olio,"pasta,garlic,olive oil,red pepper flakes",Boil pasta|Sauté garlic|Combine,Italian,20')
+
+# Example usage
+if __name__ == "__main__":
+    save_recipes_to_csv()
