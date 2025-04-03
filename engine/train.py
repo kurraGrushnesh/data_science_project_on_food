@@ -13,6 +13,7 @@ def _load_recipe_data() -> List[Dict[str, Any]]:
     return [
         # Mediterranean (10 recipes)
         {
+
             "name": "Hummus with Pita",
             "ingredients": "chickpeas,tahini,lemon_juice,garlic,olive_oil,pita_bread",
             "steps": "Blend chickpeas,Add tahini and lemon juice,Adjust seasoning,Serve with pita bread",

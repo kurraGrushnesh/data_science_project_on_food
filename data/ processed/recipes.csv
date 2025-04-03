@@ -1,5 +1,7 @@
 import pandas as pd
 from pathlib import Path
+import argparse
+import json
 
 def save_recipes_to_csv(input_data=None, output_path="data/processed/recipes.csv"):
     """
@@ -48,7 +50,8 @@ def save_recipes_to_csv(input_data=None, output_path="data/processed/recipes.csv
         print("Using default sample data")
         recipes = default_recipes
     elif isinstance(input_data, str) and input_data.endswith('.json'):
-        recipes = pd.read_json(input_data).to_dict('records')
+        with open(input_data) as f:
+            recipes = json.load(f)
     else:
         recipes = input_data
 
@@ -80,6 +83,21 @@ def save_recipes_to_csv(input_data=None, output_path="data/processed/recipes.csv
     print('Chicken Curry,"chicken,curry powder,coconut milk,onion",Brown chicken|Sauté onions|Simmer in sauce,Indian,30')
     print('Pasta Aglio e Olio,"pasta,garlic,olive oil,red pepper flakes",Boil pasta|Sauté garlic|Combine,Italian,20')
 
-# Example usage
+def main():
+    """Command-line interface for saving recipes to CSV."""
+    parser = argparse.ArgumentParser(description='Convert recipe data to standardized CSV format.')
+    parser.add_argument('-i', '--input', help='Input JSON file path (optional)')
+    parser.add_argument('-o', '--output', default='data/processed/recipes.csv',
+                       help='Output CSV file path (default: data/processed/recipes.csv)')
+
+    args = parser.parse_args()
+
+    if args.input:
+        print(f"Loading recipes from {args.input}")
+        save_recipes_to_csv(input_data=args.input, output_path=args.output)
+    else:
+        print("No input file provided - using sample data")
+        save_recipes_to_csv(output_path=args.output)
+
 if __name__ == "__main__":
-    save_recipes_to_csv()
+    main()

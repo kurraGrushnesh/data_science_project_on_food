@@ -7,7 +7,6 @@ from typing import Dict, Any
 import streamlit as st
 from PIL import Image
 
-
 # Configure paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 IMAGES_DIR = PROJECT_ROOT / "images"
@@ -16,9 +15,9 @@ sys.path.append(str(ENGINE_DIR))  # Ensure 'engine' is in path
 
 # Import RecipeRecommender safely
 try:
-    from recommend import RecipeRecommender
+    from train import RecipeRecommender
 except ImportError as e:
-    st.error("⚠️ Failed to load RecipeRecommender. Ensure 'engine/recommend.py' exists.")
+    st.error("⚠️ Failed to load RecipeRecommender. Ensure 'engine/train.py' exists.")
     st.error(f"Error details: {e}")
     st.stop()
 
@@ -69,7 +68,6 @@ def load_image(image_name: str) -> Image.Image:
     except Exception as p:
         st.warning(f"Couldn't load image {image_name}: {p}")
         return Image.new('RGB', (400, 300), color=(240, 240, 240))
-
 
 
 def display_recipe(recipe: Dict[str, Any], expanded: bool = True) -> None:
@@ -241,7 +239,8 @@ def main_interface() -> None:
                     for recipe in RECIPES:
                         recipe_ingredients = [ing.strip().lower() for ing in recipe['ingredients'].split(',')]
                         if any(ing in recipe_ingredients for ing in input_ingredients):
-                            if ("Any" in cuisine_pref or recipe['cuisine'] in cuisine_pref) and recipe['cooking_time'] <= max_time:
+                            if ("Any" in cuisine_pref or recipe['cuisine'] in cuisine_pref) and recipe[
+                                'cooking_time'] <= max_time:
                                 matching_recipes.append(recipe)
 
                     if matching_recipes:
