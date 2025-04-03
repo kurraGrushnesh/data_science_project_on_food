@@ -1,5 +1,7 @@
-# my_app.py
-import streamlit as st
+from absl import app
 
-st.title("My Custom App")
-st.write("Hello World!")
+
+@app.post("/generate_recipe")
+def generate_recipe(ingredients: list):
+    recipe = model.predict(ingredients)
+    return {"recipe": recipe}

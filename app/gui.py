@@ -10,14 +10,14 @@ from PIL import Image
 # Configure paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 IMAGES_DIR = PROJECT_ROOT / "images"
-ENGINE_DIR = PROJECT_ROOT / "engine"
-sys.path.append(str(ENGINE_DIR))  # Ensure 'engine' is in path
+ENGINE_DIR = PROJECT_ROOT / "src"
+sys.path.append(str(ENGINE_DIR))  # Ensure 'src' is in path
 
 # Import RecipeRecommender safely
 try:
     from train import RecipeRecommender
 except ImportError as e:
-    st.error("⚠️ Failed to load RecipeRecommender. Ensure 'engine/train.py' exists.")
+    st.error("⚠️ Failed to load RecipeRecommender. Ensure 'src/train.py' exists.")
     st.error(f"Error details: {e}")
     st.stop()
 
